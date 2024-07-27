@@ -1,16 +1,35 @@
 const express = require("express");
+require("dotenv").config();
 const app = express();
 const db = require("./db");
+const otp = require("simple-otp-generator");
+const nodemailer = require("nodemailer");
 
+var transporter = nodemailer.createTransport({
+  service: "Gmail",
+  auth: {
+    user: process.env.USER,
+    pass: process.env.PASS,
+  },
+});
+
+const sendotp = async (email, otp) => {
+  var mail = await transporter.sendMail({
+    from: process.env.USER,
+    to: `${email}`,
+    subject: "Confirmation OTP for signup",
+    text: `Your signup OTP is ${otp}`,
+  });
+};
 
 app.use(express.json());
 
 const create_table = () => {
   const table_name = "login";
   const create_query = `CREATE TABLE IF NOT EXISTS ${table_name}(
-                      email VARCHAR(255) not NULL,
-                      password VARCHAR(255) not Null,
-                      otp INT NULL)`;
+  email VARCHAR(255) not NULL,
+  password VARCHAR(255) not Null,
+  otp INT NULL)`;
   db.query(create_query, (err) => {
     if (err) {
       console.log(err.message);
@@ -25,7 +44,7 @@ app.get("/", async (req, res) => {
   res.status(200).send();
 });
 
-app.post("/submitForm", (req, res) => {
+app.post("/signup", (req, res) => {
   const { email, password } = req.body;
   if (
     email == undefined ||
@@ -53,9 +72,11 @@ app.post("/submitForm", (req, res) => {
                 console.log(err);
                 return res.status(500).send({ ERROR: "Failed to insert data" });
               }
+              const generate_otp = otp.generateOTP();
+              sendotp(email, generate_otp);
               return res
                 .status(200)
-                .send({ MSG: "Data inserted successfully", OTP: 1234 });
+                .send({ MSG: "Data inserted successfully" });
             }
           );
         } else {
@@ -76,11 +97,13 @@ app.post("/login", (req, res) => {
   }
   try {
     db.query(
-      "SELECT * FROM login WHERE email=? AND password=?",
+      "SELECT * FROM login WHERE email=?",
       [email, password],
-      (err, rows, Fields) => {
+      (err, rows) => {
         if (rows.length == 0) {
           return res.status(400).send({ ERROR: "email does not exist" });
+        } else if (rows[0].password != password) {
+          return res.status(404).send({ ERROR: "incorrect password" });
         } else {
           return res.status(200).send("Login successfull");
         }
@@ -93,10 +116,11 @@ app.post("/login", (req, res) => {
   }
 });
 
-app.listen(3000, (err) => {
+app.listen(process.env.PORT, (err) => {
   if (err) {
     console.log(err);
   } else {
-    console.log("Listening at port 3000");
+    console.log("Listening at port " + process.env.PORT);
+    console.log(process.env.USER);
   }
 });
